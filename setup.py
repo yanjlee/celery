@@ -1,187 +1,63 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# @Name    : setup.py
+# @Author  : yanlee
 
-from setuptools import setup, find_packages
+import setuptools
+import shutil
 
-import os
-import sys
-import codecs
+# 删除dist/目录
+shutil.rmtree('dist', ignore_errors=True)
 
-CELERY_COMPAT_PROGRAMS = int(os.environ.get('CELERY_COMPAT_PROGRAMS', 1))
-
-if sys.version_info < (2, 7):
-    raise Exception('Celery 3.2 requires Python 2.7 or higher.')
-
-# -*- Upgrading from older versions -*-
-
-downgrade_packages = [
-    'celery.app.task',
-]
-orig_path = sys.path[:]
-for path in (os.path.curdir, os.getcwd()):
-    if path in sys.path:
-        sys.path.remove(path)
-try:
-    import imp
-    import shutil
-    for pkg in downgrade_packages:
-        try:
-            parent, module = pkg.rsplit('.', 1)
-            print('- Trying to upgrade %r in %r' % (module, parent))
-            parent_mod = __import__(parent, None, None, [parent])
-            _, mod_path, _ = imp.find_module(module, parent_mod.__path__)
-            if mod_path.endswith('/' + module):
-                print('- force upgrading previous installation')
-                print('  - removing {0!r} package...'.format(mod_path))
-                try:
-                    shutil.rmtree(os.path.abspath(mod_path))
-                except Exception:
-                    sys.stderr.write('Could not remove {0!r}: {1!r}\n'.format(
-                        mod_path, sys.exc_info[1]))
-        except ImportError:
-            print('- upgrade %s: no old version found.' % module)
-except:
-    pass
-finally:
-    sys.path[:] = orig_path
-
-PY3 = sys.version_info[0] == 3
-JYTHON = sys.platform.startswith('java')
-PYPY = hasattr(sys, 'pypy_version_info')
-
-NAME = 'celery'
-entrypoints = {}
-extra = {}
-
-# -*- Classifiers -*-
-
-classes = """
-    Development Status :: 5 - Production/Stable
-    License :: OSI Approved :: BSD License
-    Topic :: System :: Distributed Computing
-    Topic :: Software Development :: Object Brokering
-    Programming Language :: Python
-    Programming Language :: Python :: 2
-    Programming Language :: Python :: 2.7
-    Programming Language :: Python :: 3
-    Programming Language :: Python :: 3.3
-    Programming Language :: Python :: 3.4
-    Programming Language :: Python :: Implementation :: CPython
-    Programming Language :: Python :: Implementation :: PyPy
-    Programming Language :: Python :: Implementation :: Jython
-    Operating System :: OS Independent
-"""
-classifiers = [s.strip() for s in classes.split('\n') if s]
-
-# -*- Distribution Meta -*-
-
-import re
-re_meta = re.compile(r'__(\w+?)__\s*=\s*(.*)')
-re_vers = re.compile(r'VERSION\s*=.*?\((.*?)\)')
-re_doc = re.compile(r'^"""(.+?)"""')
-rq = lambda s: s.strip("\"'")
-
-
-def add_default(m):
-    attr_name, attr_value = m.groups()
-    return ((attr_name, rq(attr_value)), )
-
-
-def add_version(m):
-    v = list(map(rq, m.groups()[0].split(', ')))
-    return (('VERSION', '.'.join(v[0:3]) + ''.join(v[3:])), )
-
-
-def add_doc(m):
-    return (('doc', m.groups()[0]), )
-
-pats = {re_meta: add_default,
-        re_vers: add_version,
-        re_doc: add_doc}
-here = os.path.abspath(os.path.dirname(__file__))
-with open(os.path.join(here, 'celery/__init__.py')) as meta_fh:
-    meta = {}
-    for line in meta_fh:
-        if line.strip() == '# -eof meta-':
-            break
-        for pattern, handler in pats.items():
-            m = pattern.match(line.strip())
-            if m:
-                meta.update(handler(m))
-
-# -*- Installation Requires -*-
-
-
-def strip_comments(l):
-    return l.split('#', 1)[0].strip()
-
-
-def reqs(*f):
-    return [
-        r for r in (
-            strip_comments(l) for l in open(
-                os.path.join(os.getcwd(), 'requirements', *f)).readlines()
-        ) if r]
-
-install_requires = reqs('default.txt')
-if JYTHON:
-    install_requires.extend(reqs('jython.txt'))
-
-# -*- Tests Requires -*-
-
-tests_require = reqs('test3.txt' if PY3 else 'test.txt')
-
-# -*- Long Description -*-
-
-if os.path.exists('README.rst'):
-    long_description = codecs.open('README.rst', 'r', 'utf-8').read()
-else:
-    long_description = 'See http://pypi.python.org/pypi/celery'
-
-# -*- Entry Points -*- #
-
-console_scripts = entrypoints['console_scripts'] = [
-    'celery = celery.__main__:main',
-]
-
-if CELERY_COMPAT_PROGRAMS:
-    console_scripts.extend([
-        'celeryd = celery.__main__:_compat_worker',
-        'celerybeat = celery.__main__:_compat_beat',
-        'celeryd-multi = celery.__main__:_compat_multi',
-    ])
-
-# -*- Extras -*-
-
-extras = lambda *p: reqs('extras', *p)
-# Celery specific
-features = {
-    'auth', 'cassandra', 'memcache', 'couchbase', 'threads',
-    'eventlet', 'gevent', 'msgpack', 'yaml', 'redis',
-    'mongodb', 'sqs', 'couchdb', 'riak', 'beanstalk', 'zookeeper',
-    'zeromq', 'sqlalchemy', 'librabbitmq', 'pyro', 'slmq',
-}
-extras_require = {x: extras(x + '.txt') for x in features}
-extra['extras_require'] = extras_require
-
-# -*- %%% -*-
-
-setup(
-    name=NAME,
-    version=meta['VERSION'],
-    description=meta['doc'],
-    author=meta['author'],
-    author_email=meta['contact'],
-    url=meta['homepage'],
-    platforms=['any'],
-    license='BSD',
-    packages=find_packages(exclude=['ez_setup', 'tests', 'tests.*']),
-    include_package_data=False,
-    zip_safe=False,
-    install_requires=install_requires,
-    tests_require=tests_require,
-    test_suite='nose.collector',
-    classifiers=classifiers,
-    entry_points=entrypoints,
-    long_description=long_description,
-    **extra)
+setuptools.setup(
+    name="celery-pro",
+    version="1.0.1",
+    author="yanjlee",
+    author_email="yanjlee@163.com",
+    description="This project is dedicated to sharing and teaching the fundamentals and techniques of web reverse engineering.",  # 模块简介
+    install_requires=[
+        'requests',
+        'faker',
+        'execjs',
+        'loguru',
+        'base64',
+        'hashlib',
+        'Crypto',
+        'pandas',
+        'fuzzywuzzy',
+        'httpx',
+        'Pillow',
+        'playwright',
+        'PyExecJS',
+        'redis',
+        'fastapi',
+        'uvicorn',
+        'APScheduler',
+        'beautifulsoup4',
+        'bs4',
+        'certifi',
+        'clickhouse-driver',
+        'curl-cffi',
+        'DrissionPage',
+        'fake-useragent',
+        'Flask',
+        'Flask-APScheduler',
+        'Flask-Cors',
+        'frida',
+        'gevent',
+        'httpx',
+        'Jinja2',
+        'langchain',
+        'langchain-community',
+        'suiutils-py',
+    ],
+    long_description=open(r'readme.md', encoding='utf-8').read(),  # 读取readme自述文件
+    long_description_content_type="text/markdown",
+    url="https://github.com/yanjlee/celery",  # 模块github地址
+    packages=setuptools.find_packages(),     # 自动列出项目下的包
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",   # 开源许可证
+        "Operating System :: OS Independent",      # 这里的定义是系统无关（全平台兼容），如果你的包只能在部分特定系统上运行，需要修改。
+    ],
+)
